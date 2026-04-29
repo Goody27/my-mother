@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+*.egg
+
+# SAM
+.aws-sam/
+samconfig.toml
+
+# Secrets — NEVER commit
+.env
+.env.local
+*.pem
+credentials
+
+# IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Lambda packages
+src/lambda/**/package/
