@@ -11,9 +11,9 @@ A push-type AI service where AI acts as the user's "mom", proactively executing 
 Event: AWS Summit Japan 2026 AI-DLC Hackathon
 
 ## Tech Stack
-- Runtime: Python 3.12 (Lambda)
+- Runtime: TypeScript (Node.js 22.x) — Lambda
 - AI: Amazon Bedrock (Claude 3.5 Sonnet) + Bedrock Agents + Bedrock Guardrails
-- Infra: AWS SAM (IaC)
+- IaC: Terraform
 - Region: ap-northeast-1
 
 ## Key Constraints

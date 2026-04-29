@@ -1,100 +1,173 @@
-# Build Instructions — MyMom
+# ビルド・デプロイ手順 — MyMom
 
-## Prerequisites
+## 前提条件
 
-- AWS CLI v2 configured (`aws configure`)
-- AWS SAM CLI (`brew install aws-sam-cli`)
-- Python 3.12 (`pyenv install 3.12`)
-- Slack workspace with App created
+- AWS CLI v2（`aws configure`設定済み）
+- Terraform >= 1.5（`brew install terraform`）
+- Node.js 22.x（`nodenv install 22` or `nvm install 22`）
+- Slack AppのBot Token・Signing Secret取得済み
 
-## Local Setup
+---
 
-```bash
-# Clone and setup
-cd my-mother
-pip install -r src/lambda/requirements.txt
+## ディレクトリ構成
 
-# Set local env (never commit this file)
-cp .env.example .env.local
-# Edit .env.local with your Slack tokens
+```
+my-mother/
+├── infra/                     # Terraformファイル
+│   ├── providers.tf
+│   ├── variables.tf
+│   ├── dynamodb.tf
+│   ├── lambda.tf
+│   ├── sqs.tf
+│   ├── eventbridge.tf
+│   ├── api_gateway.tf
+│   ├── secrets.tf
+│   ├── bedrock.tf
+│   ├── cloudwatch.tf
+│   └── terraform.tfvars.example
+└── src/lambda/                # TypeScript Lambda
+    ├── package.json
+    ├── tsconfig.json
+    ├── dm_poller/
+    │   └── index.ts
+    ├── analyzer/
+    │   └── index.ts
+    ├── sender/
+    │   └── index.ts
+    ├── interaction_handler/
+    │   └── index.ts
+    └── shared/
+        ├── dynamodb.ts
+        ├── slack.ts
+        └── bedrock.ts
 ```
 
-## Deploy
+---
+
+## 1. Lambdaのビルド
 
 ```bash
-# Build
-sam build
+cd src/lambda
 
-# Deploy (first time)
-sam deploy --guided \
-  --stack-name mymom-hackathon \
-  --region ap-northeast-1 \
-  --capabilities CAPABILITY_IAM
+# 依存関係インストール
+npm install
 
-# Deploy (subsequent)
-sam deploy
+# TypeScriptをビルド（esbuildでバンドル）
+npm run build
+
+# ビルド成果物: src/lambda/dist/ 以下に関数ごとのindex.jsが生成される
 ```
 
-## Secrets Setup (after first deploy)
+---
+
+## 2. Secrets Managerにトークンを登録
 
 ```bash
-# Store Slack tokens in Secrets Manager
+# Slack Bot Token
 aws secretsmanager create-secret \
   --name mymom/slack-bot-token \
   --secret-string '{"token":"xoxb-..."}' \
   --region ap-northeast-1
 
+# Slack Signing Secret
 aws secretsmanager create-secret \
   --name mymom/slack-signing-secret \
   --secret-string '{"secret":"..."}' \
   --region ap-northeast-1
 ```
 
-## Slack App Configuration
+---
 
-1. Create app at api.slack.com/apps
-2. Enable Bot Token Scopes: `channels:history`, `chat:write`, `im:history`, `im:write`
-3. Enable Interactive Components → set Request URL to API Gateway endpoint
-4. Install app to workspace
-5. Copy Bot Token and Signing Secret to Secrets Manager
-
-## Verify Deployment
+## 3. Terraform stateバケットを作成（初回のみ）
 
 ```bash
-# Check Lambda functions
-aws lambda list-functions --region ap-northeast-1 | grep mymom
-
-# Check EventBridge scheduler
-aws scheduler list-schedules --region ap-northeast-1
-
-# Check SQS queue
-aws sqs list-queues --queue-name-prefix mymom --region ap-northeast-1
-
-# Tail analyzer logs
-aws logs tail /aws/lambda/mymom-analyzer --follow --region ap-northeast-1
+aws s3 mb s3://mymom-tfstate --region ap-northeast-1
+aws s3api put-bucket-versioning \
+  --bucket mymom-tfstate \
+  --versioning-configuration Status=Enabled
 ```
 
-## Test: Manual DM Trigger
+---
+
+## 4. Terraformでデプロイ
 
 ```bash
-# Invoke dm-poller manually
+cd infra
+
+# terraform.tfvarsを作成（シークレットの値は書かない）
+cp terraform.tfvars.example terraform.tfvars
+
+# 初期化
+terraform init
+
+# 確認
+terraform plan
+
+# デプロイ
+terraform apply
+```
+
+---
+
+## 5. Slack Appの設定
+
+1. [api.slack.com/apps](https://api.slack.com/apps) でAppを作成
+2. Bot Token Scopes: `channels:history` `chat:write` `im:history` `im:write`
+3. Interactive Components → Request URL に API GatewayエンドポイントのURLを設定
+   - URLは `terraform output api_gateway_url` で確認
+4. ワークスペースにインストール
+
+---
+
+## 6. デプロイ確認
+
+```bash
+# Lambda関数の確認
+aws lambda list-functions --region ap-northeast-1 | grep mymom
+
+# EventBridgeスケジューラの確認
+aws scheduler list-schedules --region ap-northeast-1
+
+# SQSキューの確認
+aws sqs list-queues --queue-name-prefix mymom --region ap-northeast-1
+
+# dm-pollerのログを確認
+aws logs tail /aws/lambda/mymom-dm-poller --follow --region ap-northeast-1
+```
+
+---
+
+## 7. エンドツーエンドテスト（デモ確認）
+
+```bash
+# dm-pollerを手動実行
 aws lambda invoke \
   --function-name mymom-dm-poller \
   --region ap-northeast-1 \
   output.json && cat output.json
 ```
 
-## Unit Tests
+その後:
+1. 監視対象ユーザーのSlackに別アカウントからDM送信:「今週末の出社、お願いできますか？」
+2. 60秒以内に相手方へ断り文が自動送信されることを確認
+3. ユーザーへ「断っておいたよ」通知が届くことを確認
+4. CloudWatch Logsで Bedrock InvokeAgentのトレースを確認
+
+---
+
+## 8. ユニットテスト
 
 ```bash
 cd src/lambda
-pytest tests/ -v
+npm test
 ```
 
-## Integration Test (Demo Verification)
+---
 
-1. Send Slack DM to the monitored user account: "今週末出社お願いできますか？"
-2. Wait ≤ 60 seconds
-3. Verify: requester receives decline message
-4. Verify: user receives "断っておいたよ" notification
-5. Check CloudWatch Logs for Bedrock InvokeAgent trace
+## 更新時のデプロイフロー
+
+```bash
+# コード変更後
+cd src/lambda && npm run build
+cd infra && terraform apply
+```

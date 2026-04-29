@@ -1,0 +1,11 @@
+aws_region   = "ap-northeast-1"
+environment  = "hackathon"
+
+# Secrets Manager の ARN（デプロイ前にコンソールで作成して設定）
+slack_bot_token_arn      = "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:mymom/slack-bot-token-XXXXXX"
+slack_signing_secret_arn = "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:mymom/slack-signing-secret-XXXXXX"
+
+# Bedrock Agent（コンソールで作成後に設定）
+bedrock_agent_id       = ""
+bedrock_agent_alias_id = "TSTALIASID"
+bedrock_guardrail_id   = ""

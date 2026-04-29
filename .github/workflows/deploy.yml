@@ -1,0 +1,143 @@
+name: Deploy
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - "src/lambda/**"
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - "src/lambda/**"
+
+permissions:
+  id-token: write   # GitHub OIDC トークン取得に必要
+  contents: read
+  pull-requests: write  # PR へのコメント投稿に必要
+
+env:
+  AWS_REGION: ap-northeast-1
+  TF_VAR_slack_bot_token_arn: ${{ secrets.SLACK_BOT_TOKEN_ARN }}
+  TF_VAR_slack_signing_secret_arn: ${{ secrets.SLACK_SIGNING_SECRET_ARN }}
+  TF_VAR_bedrock_agent_id: ${{ secrets.BEDROCK_AGENT_ID }}
+  TF_VAR_bedrock_agent_alias_id: ${{ secrets.BEDROCK_AGENT_ALIAS_ID }}
+  TF_VAR_bedrock_guardrail_id: ${{ secrets.BEDROCK_GUARDRAIL_ID }}
+
+jobs:
+  build:
+    name: Build Lambda
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/lambda
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: src/lambda/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & zip
+        run: npm run build
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-dist
+          path: src/lambda/dist/
+          retention-days: 1
+
+  plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'pull_request'
+    defaults:
+      run:
+        working-directory: infra
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Lambda dist
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-dist
+          path: src/lambda/dist/
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -out=tfplan 2>&1 | tee plan.txt
+        continue-on-error: true
+
+      - name: Comment plan on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('infra/plan.txt', 'utf8');
+            const truncated = plan.length > 60000 ? plan.slice(0, 60000) + '\n...(truncated)' : plan;
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Terraform Plan\n\`\`\`\n${truncated}\n\`\`\``
+            });
+
+      - name: Fail if plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+  apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: hackathon
+    defaults:
+      run:
+        working-directory: infra
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Lambda dist
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-dist
+          path: src/lambda/dist/
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
