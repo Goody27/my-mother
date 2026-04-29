@@ -1,46 +1,59 @@
-# Functional Design — personality-analyzer
+# 機能設計 — personality-analyzer（AIパーソナリティ分析）
 
-## Business Logic Model
+## 概要
 
-### Flow: Weekly Analysis → Personality Profile Update
+ユーザーの行動ログ（判断ログ・チャット履歴・委任パターン・活動時間帯）を週次で分析し、
+パーソナリティプロファイルを生成する。
+
+プロファイルは2つの目的で使用:
+1. **精度向上**: Bedrock呼び出しのsystem promptに注入して回答をパーソナライズ
+2. **バイラル設計**: 公開カードとしてTwitterでシェア → 新規ユーザー獲得
+
+---
+
+## データフロー
 
 ```
-EventBridge Scheduler (weekly cron: every Monday 03:00 JST)
-  └─► personality-analyzer Lambda
-        ├─► DynamoDB: Scan mymom-users (active users)
-        │
-        │   For each user:
-        ├─► DynamoDB: Query mymom-chat-messages (last 7 days)
-        ├─► DynamoDB: Query mymom-judgement-logs (last 7 days)
-        ├─► DynamoDB: GetItem mymom-dependency-scores
-        │
-        ├─► Bedrock: InvokeModel (personality analysis)
-        │     Input: aggregated behavior data
-        │     Output schema:
-        │       {
-        │         "declineDifficulty": 0-100,
-        │         "procrastinationTendency": 0-100,
-        │         "perfectionism": 0-100,
-        │         "approvalSeeking": 0-100,
-        │         "primaryDelegationCategory": "string",
-        │         "communicationStyle": "string",
-        │         "activeHours": "string",
-        │         "momComment": "string"
-        │       }
-        │
-        ├─► DynamoDB: UpdateItem mymom-personality-profiles
-        └─► Slack: chat.postMessage (user ← "お母さんから分析結果が届いたよ")
-
-### First Card (1-week trigger, not 1-month)
-        ├─► Check: is this user's first profile update?
-        │     YES → generate public card URL
-        │           DynamoDB: UpdateItem publicFlag=false (opt-in pending)
-        │           Slack: "あなたのお母さんが知ってるあなた、見る？" + View Card button
-        └─► User clicks View Card → publicUrl revealed
-              User clicks Share → Twitter Card metadata served
+EventBridge Scheduler（毎週月曜 03:00 JST）
+  │
+  ▼
+Lambda: mymom-personality-analyzer
+  │
+  ├─► DynamoDB: mymom-users Scan（全アクティブユーザー）
+  │
+  │   ユーザーごとに以下を実行:
+  │
+  ├─► DynamoDB: mymom-chat-messages Query（過去7日間 by userId-index）
+  ├─► DynamoDB: mymom-judgement-logs Query（過去7日間 by userId-index）
+  ├─► DynamoDB: mymom-dependency-scores GetItem（現在の依存度スコア）
+  │
+  ├─► Bedrock Claude InvokeModel（パーソナリティ分析）
+  │     入力: 行動データの集計
+  │     出力スキーマ:
+  │       {
+  │         "declineDifficulty": 0-100,
+  │         "procrastinationTendency": 0-100,
+  │         "perfectionism": 0-100,
+  │         "approvalSeeking": 0-100,
+  │         "primaryDelegationCategory": "string",
+  │         "communicationStyle": "string",
+  │         "activeHours": "string",
+  │         "momComment": "string"
+  │       }
+  │
+  ├─► DynamoDB: mymom-personality-profiles UpdateItem
+  │
+  ├─► 初回プロファイル（1週間後）判定:
+  │     初回 → publicFlag=false, 公開URLを生成（非公開）
+  │           Slack: 「あなたのお母さんが知ってるあなた、見る？」通知
+  └─► 依存度スコア80超・14日継続判定:
+        該当 → momCommentに離脱防止メッセージを追加
+              「最近お母さんに頼りすぎじゃない？たまには自分でやってみて。応援してるよ。」
 ```
 
-### Analysis Prompt
+---
+
+## 分析プロンプト
 
 ```
 System: あなたはユーザーの行動分析AIです。
@@ -60,27 +73,53 @@ System: あなたはユーザーの行動分析AIです。
 User: パーソナリティを分析してください。
 ```
 
-### Personality Card Format
+---
+
+## パーソナリティカードの表示形式
 
 ```
-{userName}のMyMomが知っている{userName}
+山田くんのMyMomが知っている山田くん
 
-断るのが苦手       ████████░░ {declineDifficulty}
-先延ばし傾向       ███████░░░ {procrastinationTendency}
-完璧主義           █████░░░░░ {perfectionism}
-承認欲求           ██████░░░░ {approvalSeeking}
+断るのが苦手       ████████░░ 89
+先延ばし傾向       ███████░░░ 74
+完璧主義           █████░░░░░ 52
+承認欲求           ██████░░░░ 62
 
-よく頼むこと: {primaryDelegationCategory}
-活動時間帯: {activeHours}
-お母さんの一言: 「{momComment}」
+よく頼むこと: 断り代行
+活動時間帯: 夜22時〜25時
+お母さんの一言: 「あなたはいつもギリギリまで頑張りすぎ。もう少し早く相談して」
 ```
 
-### Business Rules
+---
 
-| Rule | Description |
-|------|-------------|
-| BR-01 | First profile generated after 7 days of activity (not 30) |
-| BR-02 | Profile updated weekly; inject into all subsequent Bedrock calls |
-| BR-03 | Public card is opt-in; publicFlag defaults to false |
-| BR-04 | Minimum 5 judgment logs required for meaningful analysis |
-| BR-05 | Dependency score breaker: if score > 80 for 14 days, add recovery message to card |
+## カードシェア設計（バイラル）
+
+```
+初回カード生成（1週間後）
+  ↓
+Slack: 「あなたのお母さんが知ってるあなた、見る？」+ [カードを見る] ボタン
+  ↓
+ユーザーがカードを閲覧
+  ↓
+[Twitterでシェア] ボタン表示
+  ↓ （OGPメタタグ付きのURLをツイート）
+フォロワーが「俺も知りたい」→ 紹介コードへの導線
+```
+
+**なぜ断り代行でなくカードがバイラルするか**:
+- 断り代行 = 「他人に見せたくない行動」
+- パーソナリティカード = 「自分が面白い存在であること」を証明するコンテンツ
+- 「AIに分析されたら面白いことになった」という文脈でシェアが起きる
+
+---
+
+## ビジネスルール
+
+| ルール | 内容 |
+|--------|------|
+| BR-01 | 初回プロファイルは1週間の使用後に生成（1ヶ月後は遅すぎる） |
+| BR-02 | プロファイルは全てのBedrock呼び出しのsystem promptに注入する |
+| BR-03 | プロファイルは週次で更新し続ける |
+| BR-04 | 公開カードはオプトイン制（publicFlag デフォルト=false） |
+| BR-05 | 判断ログが5件未満の場合は分析を行わない（データ不足） |
+| BR-06 | 依存度スコア80超・14日継続でmomCommentに離脱防止メッセージを追加 |

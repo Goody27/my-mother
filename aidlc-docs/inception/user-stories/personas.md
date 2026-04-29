@@ -1,47 +1,88 @@
-# Personas — MyMom
+# ペルソナ — MyMom
 
-## Primary Persona: 山田くん
+## メインペルソナ: 山田くん
 
-| Attribute | Detail |
-|-----------|--------|
-| Age | 25 |
-| Occupation | Web Engineer, year 1 |
-| Living situation | Tokyo, alone |
-| Personality | Logical, perfectionist, uncomfortable in social situations |
-| Pain points | Can't say no; forgets deadlines; wrong word choices cause friction |
-| Reason to use MyMom | "I don't make wrong decisions — I just don't want to take responsibility" |
-| Device | iPhone + MacBook; Slack as primary work tool |
+| 属性 | 詳細 |
+|------|------|
+| 年齢 | 25歳 |
+| 職業 | Webエンジニア（入社1年目） |
+| 居住 | 東京・一人暮らし |
+| 性格 | 論理的・完璧主義・人間関係に苦手意識あり |
+| 課題 | 断るのが苦手・手続きを忘れる・言葉の選び方でミスをする |
+| MyMomを使う理由 | 「判断を間違えるのではなく、責任を取りたくないだけ」 |
+| デバイス | iPhone + MacBook、Slackが主要連絡ツール |
 
-> **Why this persona?** Team members are this person. No research needed to start.
+> **なぜこのペルソナか**: チームメンバー自身がこの人物。データなしで始められた理由がこれ。
 
-### Persona Journey
+### ペルソナのジャーニー
 
 ```
-Week 0:  Installs MyMom → consent screen → "Mom" sends first message
-Week 0:  First Slack DM received → MyMom declines it → "断っておいたよ" notification
-         AHA MOMENT: "This thing actually works"
-Week 1:  "Convenient" — notices time/stress savings
-Week 2:  "Mom is watching, I don't need to check" — self-monitoring decreases
-Week 1:  Personality card generated → shares on Twitter → friend installs
-Month 3: "I don't know what to do without MyMom" — existential delegation
+Week 0（インストール後15分）:
+  MyMom「はじめまして。最近断れなかった予定、ある？」
+  山田くん「来週の歓迎会、行きたくないけど…」
+  MyMom「断り文つくったよ。送ってみる？」
+  → AHAモーメント: 「これ、本当に使えるやつだ」
+
+Week 0（初のリアルDM自動処理）:
+  「今週末の出社お願いできますか？」が届く
+  山田くんはYouTubeを見ている
+  MyMom → 相手方「申し訳ありませんが…」自動返信
+  山田くん「断っておいたよ」通知を受け取る
+  → 「知らないうちにもう断られていた」体験
+
+Week 1: 「便利だな」← 時間・精神コストの削減を体感
+Week 2: 「MyMomが見てるからいい」← 自己確認行動が自然と減る
+Week 1: パーソナリティカード生成（断り苦手度:89）
+         → Twitterに晒したくなる → 友人がインストール
+Month 3: 「MyMomなしで何をすればいいか分からない」← 実存的委任
 ```
 
-## Secondary Persona: 田中さん (Lurker → Converter)
+---
 
-| Attribute | Detail |
-|-----------|--------|
-| Age | 24 |
-| Occupation | Designer, year 2 |
-| Trigger | Saw 山田くん's personality card on Twitter |
-| Motivation | "断り苦手度:89 — that's literally me" |
-| Conversion path | Card share → install → first decline within 15 minutes |
+## サブペルソナ: 田中さん（Lurker → コンバーター）
 
-## First 10 Users (Concrete Acquisition Plan)
+| 属性 | 詳細 |
+|------|------|
+| 年齢 | 24歳 |
+| 職業 | デザイナー、2年目 |
+| きっかけ | 山田くんのパーソナリティカードをTwitterで見た |
+| 動機 | 「断り苦手度:89 — これ完全に私じゃん」 |
+| コンバージョン経路 | カードシェア → インストール → 15分以内に初回断り文生成 |
 
-| # | Who | Channel | Hook |
+---
+
+## 最初の10人（具体的獲得計画）
+
+| # | 誰 | チャネル | フック |
 |---|-----|---------|------|
-| 1-3 | Team members themselves | Direct | Dogfooding |
-| 4-5 | Engineer friends (Slack-heavy users) | Direct message | "Try this, tell me honestly" |
-| 6-7 | Twitter followers in engineering | Tweet with personality card | Card virality |
-| 8-9 | Zenn/Qiita readers | "I built an AI that said no for me" article | Engineer curiosity |
-| 10 | AWS Summit attendee | Post-hackathon networking | Demo memory |
+| 1〜3 | チームメンバー本人 | ダイレクト | ドッグフーディング |
+| 4〜5 | エンジニアの友人（Slack常用者） | DM | 「正直に教えて、使えそう？」 |
+| 6〜7 | Twitterフォロワー（エンジニア） | パーソナリティカードツイート | カードのバイラル性 |
+| 8〜9 | Zenn/Qiita読者 | 「AIに断ってもらったら最高だった」記事 | エンジニアの好奇心 |
+| 10 | AWS Summit参加者 | ハッカソン後のネットワーキング | デモの記憶 |
+
+---
+
+## パーソナリティカードのバイラル設計
+
+断り代行そのものは「他人に見せたくない行動」であり、バイラルしにくい。
+しかしパーソナリティカードは「自分が面白い存在であること」を証明するコンテンツ。
+
+**カードシェア体験の設計**:
+1. 初回カード生成（**1週間使用後**に初版を生成）
+2. 「あなたのお母さんが知ってるあなた、見る？」と通知
+3. カード閲覧後に即シェアボタン（Twitterカード対応）
+4. シェアするとフォロワーから「俺も知りたい」が来る → 紹介コードへの導線
+
+```
+山田くんのMyMomが知っている山田くん
+
+断るのが苦手       ████████░░ 89
+先延ばし傾向       ███████░░░ 74
+完璧主義           █████░░░░░ 52
+承認欲求           ██████░░░░ 62
+
+よく頼むこと: 断り代行
+活動時間帯: 夜22時〜25時
+お母さんの一言: 「あなたはいつもギリギリまで頑張りすぎ。もう少し早く相談して」
+```

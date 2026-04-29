@@ -1,170 +1,195 @@
-# Domain Entities — MyMom
+# ドメインエンティティ — MyMom
 
-## Class Diagram
+## クラス図
 
 ```mermaid
 classDiagram
-    class UserInfo["UserInfo (ユーザー情報)"] {
-        +String userId
-        +String email
-        +String workplace
-        +String location
-        +String lifePattern
-        +DateTime registeredAt
-        +UserStatus status
+    class ユーザー情報 {
+        +String ユーザーID
+        +String メールアドレス
+        +String 職場
+        +String 居住地
+        +String 生活パターン
+        +DateTime 登録日時
+        +UserStatus 状態
     }
 
-    class PlanInfo["PlanInfo (プラン情報)"] {
-        +String planId
-        +String userId
-        +PlanType planType
-        +Number monthlyExecutions
-        +Number monthlyLimit
-        +DateTime startAt
-        +DateTime endAt
-        +PlanStatus status
+    class プラン情報 {
+        +String プランID
+        +String ユーザーID
+        +PlanType プラン区分
+        +Number 月間実行回数
+        +Number 月間実行上限
+        +DateTime 開始日時
+        +DateTime 終了日時
+        +PlanStatus 状態
     }
 
-    class MomCharacter["MomCharacter (お母さんキャラ設定)"] {
-        +String characterId
-        +String userId
-        +PersonalityType personalityType
-        +String tone
-        +Boolean enabled
+    class お母さんキャラクター設定 {
+        +String 設定ID
+        +String ユーザーID
+        +PersonalityType 性格区分
+        +String 口調
+        +Boolean 有効フラグ
     }
 
-    class Request["Request (依頼情報)"] {
-        +String requestId
-        +String userId
-        +String requestType
-        +String sourceChannel
-        +String content
-        +DateTime receivedAt
-        +String executedContent
-        +DateTime executedAt
-        +RequestStatus status
-        +JudgeResult judgeResult
-        +EthicsResult ethicsResult
+    class 依頼情報 {
+        +String 依頼ID
+        +String ユーザーID
+        +String 依頼種別
+        +String 依頼元チャネル
+        +String 依頼内容
+        +DateTime 受信日時
+        +String 実行内容
+        +DateTime 実行日時
+        +RequestStatus 状態
+        +JudgeResult 判断結果
+        +EthicsResult 倫理フィルタ結果
     }
 
-    class JudgementLog["JudgementLog (判断ログ)"] {
-        +String logId
-        +String requestId
-        +String userId
-        +String judgement
-        +JudgeResult result
-        +String executionResult
-        +Boolean feedbackFlag
-        +DateTime recordedAt
+    class 判断ログ {
+        +String ログID
+        +String 依頼ID
+        +String ユーザーID
+        +String 判断内容
+        +JudgeResult 判断結果
+        +String 実行結果
+        +Boolean フィードバックフラグ
+        +DateTime 記録日時
     }
 
-    class DependencyScore["DependencyScore (依存度スコア)"] {
-        +String scoreId
-        +String userId
-        +Number score
-        +Number usageFrequency
-        +Number delegationRate
-        +DateTime calculatedAt
-        +DependencyStatus status
+    class 依存度スコア {
+        +String スコアID
+        +String ユーザーID
+        +Number スコア値
+        +Number 使用頻度
+        +Number 委任率
+        +DateTime 算出日時
+        +DependencyStatus 状態
     }
 
-    class PersonalityProfile["PersonalityProfile (パーソナリティプロファイル)"] {
-        +String profileId
-        +String userId
-        +Number declineDifficulty
-        +Number procrastinationTendency
-        +Number perfectionism
-        +Number approvalSeeking
-        +String primaryDelegationCategory
-        +String communicationStyle
-        +String activeHours
-        +Number analysisBasedOn
-        +DateTime lastUpdatedAt
-        +Boolean publicFlag
-        +String publicUrl
+    class 責任SLAレコード {
+        +String SLA_ID
+        +String 依頼ID
+        +String ユーザーID
+        +String 発動理由
+        +DateTime 謝罪送信日時
+        +String リカバリ内容
+        +DateTime 解決日時
+        +SLAStatus 状態
     }
 
-    class ChatMessage["ChatMessage (チャットメッセージ)"] {
-        +String messageId
-        +String userId
-        +String sessionId
-        +SenderType senderType
-        +String content
-        +List quickReplyCandidates
-        +String selectedQuickReply
-        +Boolean quickReplyUsed
-        +DateTime sentAt
+    class パーソナリティプロファイル {
+        +String プロファイルID
+        +String ユーザーID
+        +Number 断り苦手度
+        +Number 先延ばし傾向
+        +Number 完璧主義度
+        +Number 承認欲求度
+        +String 主要委任カテゴリ
+        +String コミュニケーションスタイル
+        +String 活動時間帯
+        +Number 分析ベースとなった依頼数
+        +String お母さんのコメント
+        +DateTime 最終更新日時
+        +Boolean 公開フラグ
+        +String 公開URL
     }
 
-    class SLARecord["SLARecord (責任SLAレコード)"] {
-        +String slaId
-        +String requestId
-        +String userId
-        +String triggerReason
-        +DateTime apologySentAt
-        +String recoveryContent
-        +DateTime resolvedAt
-        +SLAStatus status
+    class チャットメッセージ {
+        +String メッセージID
+        +String ユーザーID
+        +String セッションID
+        +SenderType 送信者種別
+        +String メッセージ本文
+        +List クイックリプライ候補
+        +String 選択されたクイックリプライ
+        +Boolean クイックリプライ使用フラグ
+        +DateTime 送信日時
+        +Number TTL
     }
 
-    %% Enumerations
     class RequestStatus {
         <<enumeration>>
-        DETECTED
-        ANALYZING
+        検知済み
+        分析中
         PENDING
         CANCELLED
         COMPLETED
-        FAILED
+        失敗
     }
 
     class SLAStatus {
         <<enumeration>>
-        INACTIVE
-        ACTIVE
-        RESOLVED
+        未発動
+        発動中
+        解決済み
     }
 
     class DependencyStatus {
         <<enumeration>>
-        LOW
-        MEDIUM
-        HIGH
-        CRITICAL
+        低
+        中
+        高
+        超高依存
     }
 
     class JudgeResult {
         <<enumeration>>
-        DECLINE
-        ACCEPT
-        HOLD
-        ESCALATE
+        断る
+        受諾
+        保留
+        エスカレーション
     }
 
-    %% Relationships
-    UserInfo "1" --> "1" PlanInfo : subscribes
-    UserInfo "1" --> "1" MomCharacter : configures
-    UserInfo "1" --> "*" Request : delegates
-    UserInfo "1" --> "1" DependencyScore : measured by
-    UserInfo "1" --> "1" PersonalityProfile : analyzed as
-    UserInfo "1" --> "*" ChatMessage : exchanges
-    Request "1" --> "*" JudgementLog : recorded in
-    Request "1" --> "0..1" SLARecord : triggers on failure
-    JudgementLog "*" --> "1" DependencyScore : updates
-    JudgementLog "*" --> "1" PersonalityProfile : feeds
-    ChatMessage "*" --> "1" PersonalityProfile : trains
+    class EthicsResult {
+        <<enumeration>>
+        通過
+        警告
+        ブロック
+    }
+
+    ユーザー情報 "1" --> "1" プラン情報 : 契約
+    ユーザー情報 "1" --> "1" お母さんキャラクター設定 : 設定
+    ユーザー情報 "1" --> "*" 依頼情報 : 委任
+    ユーザー情報 "1" --> "1" 依存度スコア : 計測
+    ユーザー情報 "1" --> "1" パーソナリティプロファイル : 分析
+    ユーザー情報 "1" --> "*" チャットメッセージ : 送受信
+    依頼情報 "1" --> "*" 判断ログ : 記録
+    依頼情報 "1" --> "0..1" 責任SLAレコード : 失敗時発動
+    プラン情報 "1" --> "0..1" 責任SLAレコード : SLA適用条件
+    判断ログ "*" --> "1" 依存度スコア : 更新トリガー
+    判断ログ "*" --> "1" パーソナリティプロファイル : 学習素材
+    チャットメッセージ "*" --> "1" パーソナリティプロファイル : 学習素材
 ```
 
-## Entity-to-DynamoDB Table Mapping
+---
 
-| Entity | DynamoDB Table | PK | Notes |
-|--------|---------------|-----|-------|
-| UserInfo | `mymom-users` | `userId` | |
-| PlanInfo | `mymom-plans` | `userId` | |
-| MomCharacter | `mymom-characters` | `userId` | |
-| Request | `mymom-requests` | `requestId` | GSI: `userId-index` |
-| JudgementLog | `mymom-judgement-logs` | `logId` | GSI: `requestId-index` |
-| DependencyScore | `mymom-dependency-scores` | `userId` | |
-| PersonalityProfile | `mymom-personality-profiles` | `userId` | |
-| ChatMessage | `mymom-chat-messages` | `messageId` | TTL: 90 days |
-| SLARecord | `mymom-sla-records` | `slaId` | GSI: `requestId-index` |
+## エンティティの役割
+
+| エンティティ | 役割 |
+|------------|------|
+| **ユーザー情報** | 中心エンティティ。プロフィール・状態・全関連情報のハブ |
+| **依頼情報** | Slack/メール/カレンダーから来る1件の代行依頼。状態遷移の主役 |
+| **判断ログ** | Bedrockが下した判断の全記録。誤判断フィードバック・依存度計算に使う |
+| **依存度スコア** | 使用頻度×委任率から算出。80超で離脱防止モード発動 |
+| **責任SLAレコード** | 有料プランのみ。MyMomが失敗したときの謝罪・リカバリの記録 |
+| **お母さんキャラクター設定** | Bedrockへ渡すトーン指示。プランと連動して変化 |
+| **パーソナリティプロファイル** | 質問パターン・委任傾向・時間帯を蓄積分析した性格モデル。Bedrockのsystem promptに注入して回答精度を向上。公開カードとして共有可能 |
+| **チャットメッセージ** | ユーザーとMyMomの会話履歴。Bedrockが生成した2択クイックリプライ候補を含む |
+
+---
+
+## エンティティ → DynamoDBテーブルマッピング
+
+| エンティティ | DynamoDBテーブル | PK | GSI | 備考 |
+|------------|---------------|----|----|------|
+| ユーザー情報 | `mymom-users` | `userId` | — | |
+| プラン情報 | `mymom-plans` | `userId` | — | |
+| お母さんキャラクター設定 | `mymom-characters` | `userId` | — | |
+| 依頼情報 | `mymom-requests` | `requestId` | `userId-index` | Streams有効 |
+| 判断ログ | `mymom-judgement-logs` | `logId` | `requestId-index`, `userId-index` | |
+| 依存度スコア | `mymom-dependency-scores` | `userId` | — | |
+| パーソナリティプロファイル | `mymom-personality-profiles` | `userId` | — | |
+| チャットメッセージ | `mymom-chat-messages` | `messageId` | `userId-sessionId-index` | TTL=90日 |
+| 責任SLAレコード | `mymom-sla-records` | `slaId` | `requestId-index` | |

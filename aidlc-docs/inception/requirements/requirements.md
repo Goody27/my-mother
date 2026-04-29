@@ -1,110 +1,265 @@
-# Requirements — MyMom（マイマム）
+# 要件定義 — MyMom（マイマム）
 
-## Intent Analysis
+## 意図分析
 
-| Field | Value |
-|-------|-------|
-| User Request | Build a push-type AI service that proactively handles the user's social obligations |
-| Request Type | New Project |
-| Scope | System-wide |
-| Complexity | Complex |
-| Origin | Engineer's pain point: "wording failures" in relationships; abstracted to full-delegation AI |
+| 項目 | 内容 |
+|------|------|
+| プロダクト名 | MyMom（マイマム） |
+| チーム名 | 音部に抱っこ |
+| リクエスト種別 | 新規プロダクト（グリーンフィールド） |
+| スコープ | システム全体 |
+| 複雑度 | 高 |
+| 起点 | エンジニアの具体的痛点：人間関係における「ワーディングの失敗」 |
 
-## Product Vision
+---
+
+## プロダクトコンセプト
 
 > **「人をダメにするシステム」**
-> A system that makes people dependent — AI acts as "Mom", proactively executing decisions so users never have to judge or take responsibility.
+> 使えば使うほど思考しなくなる、信頼委任設計。
 
-The core differentiator from all existing AI:
+AIが「お母さん」として先回りして意思決定・行動を代行し、失敗の責任を肩代わりするプッシュ型サービス。
+ユーザーは判断の委任先を選んでいる。MyMomはその委任を極限まで快適にする。
 
-| Model | Who acts first |
-|-------|---------------|
-| ChatGPT (Pull) | User asks → AI answers |
-| Zapier (Pull) | User designs workflow → automation runs |
-| iOS Shortcuts | User sets trigger → shortcut fires |
-| **MyMom (Push)** | **AI detects situation → AI acts → User receives "done" notification** |
+### アイデアの抽象化プロセス
 
-## Functional Requirements
+```
+「言葉を代わりに選んでくれるAI」（恋愛地雷分析）
+        ↓
+「全判断代行AI（AIがすべての意思決定をする）」
+        ↓
+「お母さん（先回りして失敗をゼロにする）」← 最終形
+```
 
-### FR-01: Slack Decline Agent (MVP)
-- Monitor user's Slack DMs via EventBridge 1-minute polling
-- Analyze each DM using Bedrock Agent (multi-step: context retrieval → ethics check → reply generation)
-- Generate decline message in "mom" character style
-- Provide 3-second cancellation window (SQS DelayQueue)
-- Send reply to sender without user action
-- Notify user: "断っておいたよ"
+---
 
-### FR-02: Ethics Filter
-- All AI-generated content must pass Bedrock Guardrails before sending
-- Block: harassment, illegal requests, privacy violations
-- On block: escalate to operator via SNS; never auto-send
+## 競合との差別化
 
-### FR-03: Chat UI with Smart Quick Replies
-- Accept user messages via REST API
-- Return Bedrock-generated response + exactly 2 quick-reply button candidates (JSON structured output)
-- Store chat history in DynamoDB (TTL: 90 days)
-- Support free-text input alongside quick replies
+### 本当の競合は「ChatGPT」ではなく「自作自動化」
 
-### FR-04: AI Personality Analysis
-- Analyze judgment logs + chat history weekly (EventBridge weekly cron)
-- Compute 4 personality scores: 断り苦手度, 先延ばし傾向, 完璧主義度, 承認欲求度
-- Inject personality profile into Bedrock system prompt for personalized responses
-- Generate shareable personality card (public URL, opt-in)
+ターゲットの25歳エンジニアはZapier + Claude APIを30分で組める能力がある。
+「なぜ自作せずMyMomを使うか」への答えが差別化の核心。
 
-### FR-05: Responsibility SLA (Paid Plan)
-- On MyMom-caused failure: auto-generate apology message → send to affected party
-- Auto-execute recovery actions
-- Notify user only after resolution
+| 観点 | Zapier + Claude API（自作） | iOS Shortcuts（自動化） | **MyMom** |
+|------|---------------------------|----------------------|-----------|
+| 設定コスト | ワークフロー設計が必要（30分〜） | トリガー設定が必要（15分〜） | **設定ゼロ。入れた瞬間に動く** |
+| 判断主体 | ユーザーがルールを書く | ユーザーがトリガーを設計する | **AIが文脈を読んで判断する** |
+| キャラクター・関係性 | なし | なし | **「お母さん」として感情的接続が生まれる** |
+| 失敗時の責任 | ユーザーの設計ミス | ユーザーの設定ミス | **MyMomが謝罪・リカバリを自律実行** |
+| ロックイン | ワークフロー資産 | ショートカット資産 | **判断履歴・パーソナリティプロファイル蓄積** |
+| 差別化の一言 | Zapierは断り方を自動化した | Shortcutsは断り文を送った | **MyMomはもう断った。あなたは何もしていない** |
 
-### FR-06: Onboarding & Consent
-- Display explicit consent screen: "MyMomがあなたの代わりに行動します"
-- Show 3-second cancellation window in consent
-- Auto-execution starts ON after consent (push-type core)
-- Setting to disable: 設定 > お母さんモード
+---
 
-### FR-07: Dependency Breaker
-- Compute dependency score from usage frequency + delegation rate
-- Score > 80 for 14+ consecutive days: send mom-voice notification to encourage self-action
+## 機能要件
 
-## Non-Functional Requirements
+### FR-01: Slack断り代行（MVP・デモコア）
 
-### NFR-01: Latency
-- EventBridge cycle: ≤ 60 seconds (1-minute cron)
-- Bedrock Agent response: ≤ 30 seconds
-- Chat API response: ≤ 5 seconds (p99)
+**シナリオ**: 「今週末出社お願いできますか？」とSlackにDMが届く
 
-### NFR-02: Availability
-- Target: 99.9% uptime
-- DLQ (maxReceiveCount=3) for all Lambda → SQS flows
-- Lambda retry with exponential backoff
+| ステップ | 処理 |
+|---------|------|
+| 1 | EventBridge 1分ポーリングでDMを取得 |
+| 2 | Bedrock Agentがユーザーの直近スケジュール・コンテキストを分析 |
+| 3 | Bedrock Guardrailsが倫理審査（ハラスメント・違法コンテンツをブロック） |
+| 4 | 「断るべき」と判断し、角が立たない断り文を生成 |
+| 5 | **ユーザーの承認なしに**Slackで自動返信（3秒取り消しウィンドウあり） |
+| 6 | ユーザーへの通知は「断っておいたよ」のみ |
 
-### NFR-03: Security
-- All secrets in AWS Secrets Manager (never hardcoded)
-- Slack Webhook: verify X-Slack-Signature (HMAC-SHA256) on every request
-- Bedrock Guardrails: guardrailVersion pinned (never DRAFT)
-- IAM least-privilege per Lambda function
+**Push型の本質的優位性**:
+```
+Zapier:  ユーザーが「断るときは毎回このワークフローを走らせる」と設計した
+MyMom:   ユーザーが何もしていないのにMyMomが断っていた
+```
 
-### NFR-04: Cost
-- MVP target: < $1/month for hackathon period
-- Per active user/month (production): ≈ $2.41 COGS → ¥620 gross margin at ¥980/month (63%)
+### FR-02: 倫理フィルタ
 
-### NFR-05: Privacy
-- Judgment log retention: 90 days (user-configurable 30–180 days)
-- Data deleted 30 days after account cancellation
-- Third-party message content: used for AI judgment only; never stored beyond minimum logs
-- Personality card sharing: opt-in only
+- Bedrock Guardrailsをエージェントに直接アタッチ
+- ブロック対象: ハラスメント・違法リクエスト・プライバシー侵害
+- ブロック時: SNS経由で運営担当者にエスカレーション、自動送信しない
+- Guardrailsバージョン: 番号固定（DRAFTは使用禁止）
 
-### NFR-06: Ethics
-- Mental health decisions always escalate to human (never auto-execute)
-- Third-party disclosure: optional AI footer on sent messages
-- Dependency breaker at score 80+14 days
+### FR-03: チャットUI＋スマートクイックリプライ
 
-## Success Criteria
+- REST API経由でユーザーメッセージを受信
+- Bedrockが回答本文 + 次の2択候補を構造化JSONで返す
+- チャット画面に回答 ＋ タップ可能な2択ボタンを表示
+- 自由入力も可（ボタンと共存）
+- チャット履歴はDynamoDBに保存（TTL: 90日）
 
-| Criterion | Target |
-|-----------|--------|
-| Demo: live Slack decline within 60 seconds | ✅ Must |
-| CloudWatch Logs show Bedrock trace | ✅ Must |
-| GitHub commits show AI-DLC lifecycle | ✅ Must |
-| Unit economics proven ≥ 50% margin | ✅ Must |
-| Personality card shareable | ✅ Should |
+### FR-04: AIパーソナリティ分析・プロファイル公開
+
+- 判断ログ・チャット履歴・委任パターンを週次で分析（EventBridge週次cron）
+- 4スコアを算出: `断り苦手度` `先延ばし傾向` `完璧主義度` `承認欲求度`
+- パーソナリティプロファイルをBedrockのsystem promptに注入 → 回答精度向上
+- 公開カードとして生成（オプトイン制）、Twitter Card対応でバイラル設計
+
+**初回カード生成: 1ヶ月後ではなく1週間後**
+Ahaモーメント（第0段階）と口コミ起点を一体化させる。
+「AIに分析されたら面白いことになった」という文脈でバイラルを起こす。
+
+### FR-05: 責任SLA（有料プランのみ）
+
+- MyMomの判断が誤りで失敗が発生した場合、MyMomが謝罪文を生成して関係者に送信
+- リカバリアクションを自律実行
+- ユーザーには「対処しておいたよ」通知のみ
+- 失敗の精神的コストをゼロにすることで、有料プランへの移行とリテンションを実現
+
+### FR-06: オンボーディング・同意設計
+
+初回起動時に以下を明示確認:
+- 「お母さんがあなたの代わりに行動します。実行前に3秒の取り消しウィンドウがあります」
+- 「いつでも自動実行をOFFにできます（設定 > お母さんモード）」
+
+> **設計方針**: 同意ボタン押下後、**自動実行はON**でスタート。
+> 初期値OFFにすると「ユーザーが自分でONにする」プルモデルに逆戻りし、Push型の体験が永遠に始まらない。
+
+**第0段階：Ahaモーメント設計（インストール後15分）**
+
+```
+1. Slack Appインストール完了
+   ↓
+2. MyMomから1通目のメッセージ:
+   「はじめまして。お母さんだよ。最近断れなかった予定、ある？今すぐ練習しよ。」
+   ↓
+3. ユーザーが状況を入力（任意）:
+   例:「来週の歓迎会、行きたくないけど断れてない」
+   ↓
+4. MyMomがその場で断り文を生成・提示（送信するかはユーザーが決める）:
+   「断り文つくったよ。送ってみる？それとも自分でアレンジする？」
+   ↓
+5. 「こういうことを、次からは自動でやっといてあげる」
+```
+
+入力がなくても機能する: ユーザーが無反応なら「見てるからね」とだけ送って監視開始。
+最初のリアルなDMが来た瞬間に自動実行 → 「知らないうちにもう動いていた」体験に繋がる。
+
+### FR-07: 高依存ユーザーへの自律回復設計
+
+- 依存度スコアが「超高」（80超）を14日間継続した場合、お母さんの口調で通知:
+  > 「最近お母さんに頼りすぎじゃない？たまには自分でやってみて。応援してるよ。」
+- ブランドを損なわずに機能するブレーカー設計
+- メンタルヘルスに関わる判断は常に人間エスカレーション
+
+---
+
+## 非機能要件
+
+### NFR-01: レイテンシ
+
+| 処理 | 目標 |
+|------|------|
+| DM検知〜断り文送信（エンドツーエンド） | ≤ 90秒（EventBridge 60秒 + Bedrock 30秒） |
+| Bedrock Agent応答 | ≤ 30秒（Lambda timeout: 60秒） |
+| 取り消しウィンドウ | 3秒（SQS DelaySeconds=3） |
+| チャットAPI応答 | ≤ 5秒（p99） |
+
+### NFR-02: 可用性
+
+| 要件 | 実装 |
+|------|------|
+| 目標SLO | 99.9% |
+| SQS DLQ | maxReceiveCount=3、失敗メッセージをDLQで保全 |
+| Lambda | 指数バックオフで2回リトライ |
+| DynamoDB べき等性 | requestIdはUUID、PENDING→CANCELLED状態フラグで排他制御 |
+
+### NFR-03: セキュリティ
+
+| 要件 | 実装 |
+|------|------|
+| シークレット | AWS Secrets Manager必須（ハードコード禁止） |
+| Slack Webhook認証 | X-Slack-SignatureのHMAC-SHA256検証（全リクエスト必須） |
+| リプレイ攻撃防止 | タイムスタンプ±5分超は即座に403 |
+| Guardrailsバージョン | 番号固定（"DRAFT"は使用禁止） |
+| IAM | Lambda関数ごとに専用ロール・最小権限 |
+
+### NFR-04: コスト
+
+**MVP期間（ハッカソン）**: < $1/月
+
+**本番ユニットエコノミクス（アクティブユーザー1人/月）**:
+
+| 処理 | 件数/月 | 入力トークン | 出力トークン |
+|------|--------|------------|------------|
+| Slack DM判断（Agent orchestration含む） | 150件 | 375,000 | 45,000 |
+| 断り文・返信生成 | 20件 | 10,000 | 10,000 |
+| パーソナリティ分析（週次） | 4件 | 8,000 | 2,000 |
+| クイックリプライ | 30件 | 6,000 | 3,000 |
+| **合計** | | **399,000** | **60,000** |
+
+```
+入力コスト: 399,000 / 1,000,000 × $3.00  = $1.20
+出力コスト:  60,000 / 1,000,000 × $15.00 = $0.90
+Guardrails:    150 × $0.75/1,000          = $0.11
+インフラ（Lambda/DynamoDB/SQS）           = $0.20
+─────────────────────────────────────────────────
+COGS合計: 約 $2.41/ユーザー/月（≈ 約360円）
+```
+
+**損益計算**:
+
+| 項目 | 金額 |
+|------|------|
+| 有料プラン収益 | ¥980/月 |
+| COGS（AI + インフラ） | 約¥360/月 |
+| **粗利** | **約¥620/月（粗利率 63%）** |
+
+### NFR-05: データプライバシー
+
+| 項目 | 方針 |
+|------|------|
+| 判断ログ保持期間 | 90日間（ユーザー設定で30日〜180日に変更可） |
+| 解約後データ削除 | 解約後30日で完全削除 |
+| パーソナリティカード共有 | デフォルトOFF・オプトイン制 |
+| 第三者メッセージの扱い | 判断目的のみ利用、外部送信・学習に使用しない |
+| Slack DM・Gmail | MyMomのAI判断のみに使用。データ保存は必要最小限の判断ログのみ |
+
+### NFR-06: 倫理・ユーザー保護
+
+- 第三者への配慮: 断り文末尾に任意でフッター付記可能
+  > `（このメッセージはAIアシスタントにより下書きされました）`
+- メンタルヘルスに関わる判断は人間エスカレーション必須
+- 依存度スコア80超・14日継続でブレーカー発動（離脱防止通知）
+
+---
+
+## 市場規模（TAM / SAM / SOM）
+
+| 区分 | 定義 | 規模 | 年間市場 |
+|------|------|------|---------|
+| TAM | 23〜25歳就業者全体 | 270万人 | 約317億円/年 |
+| SAM | ITエンジニア・デジタルワーカー層 | 15万人 | 約18億円/年 |
+| SOM | 初年度獲得目標 | 1,000人 | 約1,180万円/年 |
+
+---
+
+## プラン構成
+
+| プラン | 料金 | 機能 | お母さんの性格 |
+|--------|------|------|--------------|
+| 無料 | 0円 | 月3回まで自動実行・断り代行のみ | 厳しめ |
+| 有料 | 月980円 | 全機能・常時自動実行・**責任SLA付き** | 甘め |
+| （将来）| 未定 | ライフイベント対応・関西弁など | カスタマイズ |
+
+---
+
+## 信頼委任の段階
+
+```
+第0段階（インストール後15分以内）: 「これ、本当に動いた」← Ahaモーメント
+第1段階（0〜1週間）: 「便利だな」← 時間・精神コストの削減を体感
+第2段階（1〜4週間）: 「MyMomが見てるからいい」← 自己確認行動が自然と減る
+第3段階（3ヶ月〜）: 「MyMomなしで何をすればいいか分からない」← 実存的委任
+```
+
+---
+
+## 成功基準
+
+| 基準 | 目標 |
+|------|------|
+| デモ: 審査員の目の前でSlack断り通知が届く | ✅ 必須 |
+| CloudWatch LogsでBedrockトレースを表示 | ✅ 必須 |
+| GitHubコミットログにAI-DLC痕跡 | ✅ 必須 |
+| ユニットエコノミクス粗利率50%以上を証明 | ✅ 必須 |
+| パーソナリティカード共有可能 | ✅ Should |
