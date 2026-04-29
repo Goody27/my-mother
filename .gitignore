@@ -30,3 +30,4 @@ htmlcov/
 
 # Lambda packages
 src/lambda/**/package/
+src/lambda/node_modules/

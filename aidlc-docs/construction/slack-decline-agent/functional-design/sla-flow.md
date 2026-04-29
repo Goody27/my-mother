@@ -1,4 +1,4 @@
-# 機能設計 — 責任SLAフロー（有料プランのみ）
+# 機能設計 — 責任SLAフロー
 
 MyMomの自動実行が失敗した場合に発動する謝罪・リカバリフロー。
 
@@ -44,10 +44,10 @@ graph TD
     C1 -->|依頼状態:失敗 更新| E1
     C1 -->|プラン照会| C2
     E2 -->|プラン区分| C2
-    C2 -->|無料プラン| C10
+    C2 -->|エスカレーション| C10
     C10 -->|手動対応依頼| B6
     B6 -->|通知| ADMIN
-    C2 -->|有料プラン| C3
+    C2 -->|SLA発動| C3
     E1 -->|失敗依頼内容| C3
     E4 -->|判断ログ| C3
     C3 -->|Bedrock 失敗原因分析| C4
@@ -103,13 +103,13 @@ sequenceDiagram
     SLA->>DBPlan: GetItem（userId）
     DBPlan-->>SLA: プラン情報
 
-    alt 無料プラン
+    SLA->>DBLog: GetItem（関連判断ログ）
+    opt エスカレーション判定
         SLA->>SNS: Publish（エスカレーション通知）
         SNS->>Slack: chat.postMessage（運営担当者チャンネル）
         Slack-->>Admin: 手動対応依頼通知
-        SLA->>Slack: chat.postMessage（ユーザーへ「確認中」通知）
-        Slack-->>User: 通知
-    else 有料プラン
+    end
+    Note over SLA: SLA発動
         SLA->>DBLog: GetItem（関連判断ログ）
         SLA->>Claude: InvokeModel（失敗原因分析）
         Claude-->>SLA: 失敗原因レポート
@@ -135,7 +135,6 @@ sequenceDiagram
         SLA->>DBSLA: UpdateItem（状態:解決済み, 解決日時）
         SLA->>Slack: chat.postMessage（ユーザーへリカバリ完了通知）
         Slack-->>User: 「対処しておいたよ」
-    end
 ```
 
 ---
